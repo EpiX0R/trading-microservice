@@ -4,6 +4,8 @@ const app = express();
 const cors = require('cors');
 const server = require('http').createServer(app);
 const io = require('socket.io')(server);
+const dayjs = require('dayjs');
+const schedule = require('node-schedule');
 
 const Stocks = require("./modules/Stocks");
 
@@ -21,6 +23,29 @@ app.use(cors({origin: [
 
 //io.origins(["https://tradingservice.serverpojkarna.se:443"])
 
+schedule.scheduleJob("Save daily prices", {hours: 21, minute: 00}, async () => {
+    stockData = await Stocks.getStock();
+    let stocks = [];
+    
+    stockData.forEach((stock) => {
+        stocks.push({
+            name: stock.name,
+            shorthand: stock.shorthand,
+            date: dayjs().toDate(),
+            close: stock.currentPrice
+        });    
+    });
+
+    const client  = await mongo.connect(dsn);
+    const db = await client.db();
+    const col = await db.collection("dailyPrices");
+
+    await col.insertMany(stocks);
+    await client.close();
+})
+
+// every day at 9 pm save all stocks current price as close value in new dailyprices date 
+
 io.on('connection', (socket) => {
     console.log("New connection.");
 
@@ -31,12 +56,13 @@ io.on('connection', (socket) => {
      * Should be dealt with in same transaction session as the purchase/sell order and
      * emit socket call after transaction is finished.
      * 
-     * Service uses worse solution for the security of conforming to requirement specification.
+     * Service uses worse solution for the purpose of conforming to requirement specification.
      */
     socket.on('update_price', async (data) => {
         const client  = await mongo.connect(dsn);
         const db = await client.db();
         const col = await db.collection("stocks");
+        let trend = "trending_flat";
 
         let newPrice = data.currentPrice * (data.previouslyAvailable / data.currentlyAvailable);
 
@@ -50,12 +76,24 @@ io.on('connection', (socket) => {
             newPrice = data.currentPrice * 0.5;
         }
 
-        await col.updateOne({shorthand: data.stock}, {
-            $set: {currentPrice: newPrice}
+        newPrice = parseFloat(newPrice.toFixed(10));
+
+        if (newPrice > data.yesterdayPrice) {
+            trend = "trending_up"
+        } else if (newPrice === data.yesterdayPrice) {
+            trend = "trending_flat"
+        } else if (newPrice < data.yesterdayPrice) {
+            trend = "trending_down"
+        }
+
+        data.stock.trend = trend;
+    
+        await col.updateOne({shorthand: data.stock.shorthand}, {
+            $set: {available: data.currentlyAvailable, currentPrice: newPrice, trend: trend}
         });
 
         io.emit("update_price", [data.stock, newPrice]);
-        io.emit("update_share", data.stock);
+        io.emit("update_share", data.stock.shorthand);
     });
 });
 
