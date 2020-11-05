@@ -9,16 +9,22 @@ const schedule = require('node-schedule');
 
 const Stocks = require("./modules/Stocks");
 
-const port = 3000;
+const port = 3001;
 
 const mongo = require("mongodb").MongoClient;
 const dsn =  process.env.TRADING_DSN || "mongodb://127.0.0.1:27017/trading";
 
-/* Enable CORS */
-app.use(cors({origin: [
+if (process.env.NODE_ENV !== "production") {
     "http://127.0.0.1:4200",
     "http://localhost:4200",
-    "https://trading.serverpojkarna.se"
+    "http://127.0.0.1:1338",
+    "http://localhost:1338"
+}
+
+/* Enable CORS */
+app.use(cors({origin: [
+    "https://trading.serverpojkarna.se",
+    "https://trading-api.serverpojkarna.se"
 ], credentials: true}));
 
 //io.origins(["https://tradingservice.serverpojkarna.se:443"])
