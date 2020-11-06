@@ -5,7 +5,7 @@ const cors = require('cors');
 const server = require('http').createServer(app);
 const io = require('socket.io')(server);
 const dayjs = require('dayjs');
-const schedule = require('node-schedule');
+const cron = require('cron').CronJob();
 
 const Stocks = require("./modules/Stocks");
 
@@ -29,7 +29,7 @@ app.use(cors({origin: [
 
 //io.origins(["https://tradingservice.serverpojkarna.se:443"])
 
-schedule.scheduleJob("Save daily prices", {hours: 21, minute: 00}, async () => {
+new cron("0 0 20 * * *", async () => {
     stockData = await Stocks.getStock();
     let stocks = [];
     
@@ -48,7 +48,7 @@ schedule.scheduleJob("Save daily prices", {hours: 21, minute: 00}, async () => {
 
     await col.insertMany(stocks);
     await client.close();
-})
+}, () => {}, true)
 
 // every day at 9 pm save all stocks current price as close value in new dailyprices date 
 
